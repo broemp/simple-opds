@@ -7,14 +7,14 @@ local GestureRange = require("ui/gesturerange")
 local ImageWidget = require("ui/widget/imagewidget")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local Size = require("ui/size")
-local TextBoxWidget = require("ui/widget/textboxwidget")
+local TextWidget = require("ui/widget/textwidget")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
 local lfs = require("libs/libkoreader-lfs")
 
 local CoverTile = InputContainer:extend{
     item = nil,
-    cover_path = nil,    -- absolute path to a cached cover file, or nil
+    cover_path = nil,
     width = 200,
     height = 280,
     on_tap = nil,
@@ -31,11 +31,10 @@ local function build_placeholder(width, height, item)
         height = height,
         CenterContainer:new{
             dimen = Geom:new{ w = width - 2 * Size.padding.small, h = height - 2 * Size.padding.small },
-            TextBoxWidget:new{
+            TextWidget:new{
                 text = item.title or "",
                 face = Font:getFace("smallinfofont"),
-                width = width - 2 * Size.padding.large,
-                alignment = "center",
+                max_width = width - 2 * Size.padding.large,
             },
         },
     }
@@ -52,50 +51,59 @@ local function build_image(width, height, path)
             file = path,
             width = width - 2 * Size.border.thin,
             height = height - 2 * Size.border.thin,
-            scale_factor = 0, -- fit, keep aspect ratio
+            scale_factor = 0,
             file_do_cache = false,
         },
     }
 end
 
+local function build_cover(width, height, item, path)
+    if path and lfs.attributes(path, "mode") == "file" then
+        return build_image(width, height, path)
+    end
+    return build_placeholder(width, height, item)
+end
+
 function CoverTile:init()
-    local cover_h = math.floor(self.height * 0.78)
-    local label_h = self.height - cover_h
-    local cover
-    if self.cover_path and lfs.attributes(self.cover_path, "mode") == "file" then
-        cover = build_image(self.width, cover_h, self.cover_path)
+    self._cover_h = math.floor(self.height * 0.78)
+    self._label_h = self.height - self._cover_h
+    self._cover_slot = build_cover(self.width, self._cover_h, self.item, self.cover_path)
+
+    -- TextWidget auto-truncates with "…" when max_width is exceeded — way
+    -- more reliable than TextBoxWidget's height-based clipping.
+    local label_width = self.width - 2 * Size.padding.small
+    local title = TextWidget:new{
+        text = self.item.title or "",
+        face = Font:getFace("x_smallinfofont"),
+        max_width = label_width,
+    }
+    local author
+    if self.item.author and self.item.author ~= "" then
+        author = TextWidget:new{
+            text = self.item.author,
+            face = Font:getFace("xx_smallinfofont"),
+            max_width = label_width,
+            fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+        }
     else
-        cover = build_placeholder(self.width, cover_h, self.item)
+        author = VerticalSpan:new{ width = 0 }
     end
 
     local label = FrameContainer:new{
         bordersize = 0,
         padding = Size.padding.small,
         width = self.width,
-        height = label_h,
+        height = self._label_h,
         VerticalGroup:new{
             align = "center",
-            TextBoxWidget:new{
-                text = self.item.title or "",
-                face = Font:getFace("x_smallinfofont"),
-                width = self.width - 2 * Size.padding.small,
-                alignment = "center",
-                line_height = 0,
-            },
-            self.item.author and TextBoxWidget:new{
-                text = self.item.author,
-                face = Font:getFace("xx_smallinfofont"),
-                width = self.width - 2 * Size.padding.small,
-                alignment = "center",
-                line_height = 0,
-                fgcolor = Blitbuffer.COLOR_DARK_GRAY,
-            } or VerticalSpan:new{ width = 0 },
+            title,
+            author,
         },
     }
 
-    local content = VerticalGroup:new{
+    self._content = VerticalGroup:new{
         align = "center",
-        cover,
+        self._cover_slot,
         label,
     }
 
@@ -105,7 +113,7 @@ function CoverTile:init()
         margin = 0,
         width = self.width,
         height = self.height + 2 * Size.padding.small,
-        content,
+        self._content,
     }
 
     self.dimen = Geom:new{ x = 0, y = 0, w = self.width, h = self.height + 2 * Size.padding.small }
@@ -118,6 +126,15 @@ function CoverTile:init()
             },
         },
     }
+end
+
+function CoverTile:set_cover_path(path)
+    if path == self.cover_path then return end
+    self.cover_path = path
+    local new_cover = build_cover(self.width, self._cover_h, self.item, path)
+    self._cover_slot = new_cover
+    self._content[1] = new_cover
+    if self._content.resetLayout then self._content:resetLayout() end
 end
 
 function CoverTile:onTapTile()

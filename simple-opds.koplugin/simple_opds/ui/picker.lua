@@ -7,16 +7,28 @@ local _ = require("gettext")
 
 local Picker = {}
 
--- Show the "Add server" dialog. Calls `on_added(server)` with a stored server.
-function Picker.add_server(on_added)
+-- Show an add-or-edit dialog. Pass `existing` to prefill from a stored server.
+-- NOTE: MultiInputDialog's `text_type = "password"` is broken upstream
+-- (see multiinputdialog.lua: "semi-broken when text_type is password"), so the
+-- password field renders in plain text. Acceptable trade-off vs. losing it.
+local function show_form(existing, on_saved)
+    local title = existing and _("Edit OPDS server") or _("Add OPDS server")
     local dialog
     dialog = MultiInputDialog:new{
-        title = _("Add OPDS server"),
+        title = title,
         fields = {
-            { description = _("Name"), text = "", hint = _("e.g. Standard Ebooks") },
-            { description = _("Catalog URL"), text = "", hint = _("https://…/opds") },
-            { description = _("Username (optional)"), text = "", hint = "" },
-            { description = _("Password (optional)"), text = "", hint = "", text_type = "password" },
+            { description = _("Name"),
+              text = existing and existing.name or "",
+              hint = _("e.g. My Calibre") },
+            { description = _("Catalog URL"),
+              text = existing and existing.url or "",
+              hint = _("https://…/opds") },
+            { description = _("Username (optional)"),
+              text = existing and existing.username or "",
+              hint = "" },
+            { description = _("Password (optional, shown in plain text)"),
+              text = existing and existing.password or "",
+              hint = "" },
         },
         buttons = {{
             { text = _("Cancel"), id = "close",
@@ -30,16 +42,26 @@ function Picker.add_server(on_added)
                   end
                   UIManager:close(dialog)
                   local server = ServerSettings.save{
+                      id = existing and existing.id or nil,
                       name = fields[1],
                       url = fields[2],
                       username = (fields[3] ~= "" and fields[3]) or nil,
                       password = (fields[4] ~= "" and fields[4]) or nil,
+                      default_category_href = existing and existing.default_category_href or nil,
                   }
-                  if on_added then on_added(server) end
+                  if on_saved then on_saved(server) end
               end },
         }},
     }
     UIManager:show(dialog)
+end
+
+function Picker.add_server(on_added)
+    show_form(nil, on_added)
+end
+
+function Picker.edit_server(server, on_saved)
+    show_form(server, on_saved)
 end
 
 -- Show a picker for existing servers. `on_pick(server)` opens it; "Add new" triggers add_server.

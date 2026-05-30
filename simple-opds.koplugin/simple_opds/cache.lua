@@ -22,7 +22,11 @@ end
 
 function CoverCache.path_for(url)
     if not url or url == "" then return nil end
-    return CACHE_DIR .. "/" .. md5(url)
+    ensure_dir()
+    -- Always pin a .jpg suffix so DocumentRegistry:isImageFile passes;
+    -- MuPDF's actual decode in renderImageFile sniffs magic bytes, so PNG /
+    -- WebP / GIF covers still render correctly under this name.
+    return CACHE_DIR .. "/" .. md5(url) .. ".jpg"
 end
 
 function CoverCache.has(url)

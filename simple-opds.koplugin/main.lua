@@ -60,11 +60,11 @@ function SimpleOPDS:_open_server(server)
     NetworkMgr:runWhenConnected(function()
         UIManager:show(InfoMessage:new{ text = _("Connecting…"), timeout = 1 })
         UIManager:nextTick(function()
-            local nav_links = FeedClient.discover(server) or {}
+            local discovered = FeedClient.discover(server) or {}
             self.shell = Shell:new{
                 server = server,
-                nav_links = nav_links,
-                current_view = "home",
+                nav_links = discovered.nav_links or {},
+                discovered_search_url = discovered.search_url,
                 download_dir = self:_download_dir(),
                 file_downloaded_callback = function(path) self:_after_download(path) end,
                 on_switch_server = function()
@@ -72,6 +72,13 @@ function SimpleOPDS:_open_server(server)
                     self.shell = nil
                     Picker.pick(function(s) self:_open_server(s) end,
                                 function(s) self:_open_server(s) end)
+                end,
+                on_edit_server = function()
+                    Picker.edit_server(server, function(updated)
+                        UIManager:close(self.shell)
+                        self.shell = nil
+                        self:_open_server(updated)
+                    end)
                 end,
                 on_close = function() self.shell = nil end,
             }

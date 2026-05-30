@@ -49,9 +49,13 @@ local function http_get(item_url, username, password)
 end
 
 local function download_to(local_path, remote_url, username, password)
-    local file, ferr = io.open(local_path, "w")
+    -- Write to a sibling .tmp first and rename on success, so a reader
+    -- watching `local_path` only ever sees a complete file. (This matters for
+    -- subprocess-based cover fetches polled by file existence.)
+    local tmp = local_path .. ".tmp"
+    local file, ferr = io.open(tmp, "w")
     if not file then
-        logger.dbg("simple-opds: cannot open", local_path, ferr)
+        logger.dbg("simple-opds: cannot open", tmp, ferr)
         return false
     end
     socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, socketutil.FILE_TOTAL_TIMEOUT)
@@ -63,8 +67,11 @@ local function download_to(local_path, remote_url, username, password)
         password = password,
     })
     socketutil:reset_timeout()
-    if code == 200 then return true end
-    os.remove(local_path)
+    if code == 200 then
+        os.rename(tmp, local_path)
+        return true
+    end
+    os.remove(tmp)
     return false, code
 end
 
@@ -77,14 +84,13 @@ local function abs(base, href)
 end
 
 -- Parse the root feed of a server, classify its navigation links.
--- Returns: { root_entries = {...book/category items...}, links = { recent, popular, categories, search } }
 function FeedClient.fetch_feed(server, item_url)
     local xml, _h, code = http_get(item_url, server.username, server.password)
     if not xml then return nil, code end
     local ok, feed = pcall(function() return OPDSParser():parse(xml) end)
     if not ok or not feed then
         logger.dbg("simple-opds: parse failed for", item_url)
-        return nil
+        return nil, "parse"
     end
     return feed.feed or feed
 end
@@ -155,10 +161,11 @@ local function normalize_entry(entry, base_url)
     return item
 end
 
--- Returns: items, nav_links (relative to base_url), next_url, search_url
+-- Returns: listing-table on success; nil, code on failure (code is HTTP status
+-- when the request reached the server, or "parse" when the XML was unreadable).
 function FeedClient.list_items(server, item_url)
-    local feed = FeedClient.fetch_feed(server, item_url)
-    if not feed then return nil end
+    local feed, code = FeedClient.fetch_feed(server, item_url)
+    if not feed then return nil, code end
 
     local nav_links = {}
     local next_url, search_url
@@ -200,41 +207,90 @@ function FeedClient.list_items(server, item_url)
     }
 end
 
--- Probe server root and return derived navigation links.
+-- Probe server root. Returns { nav_links, search_url } from the root feed,
+-- or nil if the request failed.
 function FeedClient.discover(server)
     local listing = FeedClient.list_items(server, server.url)
     if not listing then return nil end
-    return listing.nav_links or {}
+    return {
+        nav_links = listing.nav_links or {},
+        search_url = listing.search_url,
+    }
 end
 
 -- Resolve a search URL (OpenSearch description doc) into a usable template.
+-- Returns a template with `{searchTerms}` rewritten to `%s` and any other
+-- `{foo?}` placeholders stripped, resolved against the description doc URL
+-- so relative templates become absolute.
 function FeedClient.resolve_search_template(server, search_url)
     local xml = http_get(search_url, server.username, server.password)
-    if not xml then return nil end
+    if not xml then
+        logger.dbg("simple-opds: opensearch GET failed for", search_url)
+        return nil
+    end
     local ok, parsed = pcall(function() return OPDSParser():parse(xml) end)
-    if not ok or not parsed then return nil end
-    -- OpenSearch <Url type="application/atom+xml" template="..."/>
+    if not ok or not parsed then
+        logger.dbg("simple-opds: opensearch parse failed for", search_url)
+        return nil
+    end
     local urls = parsed.OpenSearchDescription and parsed.OpenSearchDescription.Url
     if type(urls) ~= "table" then return nil end
+
+    -- Prefer an Atom/OPDS Url; fall back to the first one with a template.
+    local picked
     for _, u in ipairs(urls) do
-        if u.template then
-            return (u.template:gsub("{searchTerms}", "%%s"))
+        if u.template and u.type and u.type:find("atom") then picked = u; break end
+    end
+    if not picked then
+        for _, u in ipairs(urls) do
+            if u.template then picked = u; break end
         end
     end
+    if not picked then return nil end
+
+    local tpl = picked.template
+    -- {searchTerms} → %s; drop any other optional placeholders like {foo?}.
+    tpl = tpl:gsub("{searchTerms}", "%%s")
+    tpl = tpl:gsub("{[^}]*}", "")
+    -- Tidy up dangling separators left by stripped placeholders.
+    tpl = tpl:gsub("&+", "&"):gsub("&$", ""):gsub("?&", "?"):gsub("%?$", "")
+    tpl = url.absolute(search_url, tpl)
+    return tpl
 end
 
 function FeedClient.search(server, search_url, query)
     if not search_url or not query or query == "" then return nil end
     local template = search_url
     if not template:find("%%s") then
-        -- Maybe it's an OpenSearch description doc; try to resolve.
         local resolved = FeedClient.resolve_search_template(server, search_url)
         if resolved then template = resolved end
     end
     local encoded = url.escape(query)
-    local target = template:find("%%s") and template:format(encoded)
-                   or (template .. (template:find("?") and "&" or "?") .. "q=" .. encoded)
+    local target
+    if template:find("%%s") then
+        target = template:format(encoded)
+    else
+        target = template .. (template:find("?", 1, true) and "&" or "?") .. "q=" .. encoded
+    end
+    logger.dbg("simple-opds: search target", target)
     return FeedClient.list_items(server, target)
+end
+
+-- Heuristic: a feed is treated as an A-Z index if at least 3 of its entries
+-- are single-letter titles. Returns a map { ["A"] = sub_feed_url, … } or nil.
+function FeedClient.detect_az_index(listing)
+    if not listing or not listing.items then return nil end
+    local letters = {}
+    local hits = 0
+    for _, item in ipairs(listing.items) do
+        local t = item.title and item.title:match("^%s*([A-Za-z])%s*$")
+        if t and item.sub_feed_url then
+            letters[t:upper()] = item.sub_feed_url
+            hits = hits + 1
+        end
+    end
+    if hits >= 3 then return letters end
+    return nil
 end
 
 return FeedClient
