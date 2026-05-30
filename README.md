@@ -20,16 +20,61 @@ Adding a server opens directly into a grid of book covers — no intermediate "O
 
 ## Install
 
-Symlink the plugin folder into your KOReader plugins directory:
+### General (any KOReader device)
+
+1. Grab the latest `simple-opds.koplugin-<version>.zip` from the [Releases page](https://github.com/broemp/simple-opds/releases).
+2. Unzip it — you'll get a folder named `simple-opds.koplugin/`.
+3. Copy that folder (the whole thing, name and all) into your device's `koreader/plugins/` directory.
+4. Restart KOReader (or use **⚙️ → More tools → Plugin management** to enable it without a restart).
+5. **Simple OPDS** shows up in the FileManager top menu, in the same group as the built-in OPDS browser.
+
+The plugins directory location depends on the device. Common ones:
+
+| Device      | Plugins path                                            |
+| ----------- | ------------------------------------------------------- |
+| Kindle      | `/mnt/us/koreader/plugins/`                             |
+| Kobo        | `.adds/koreader/plugins/` (in the user-visible root)    |
+| PocketBook  | `applications/koreader/plugins/` (on the internal card) |
+| reMarkable  | `/home/root/koreader/plugins/`                          |
+| Boox        | `Books/.adds/koreader/plugins/` or `koreader/plugins/`  |
+| Android     | The app's external storage `koreader/plugins/`          |
+
+If you've ever installed another koplugin manually, drop the folder in the same place.
+
+### Kindle (step-by-step)
+
+Assuming you already have [KOReader installed on your Kindle](https://github.com/koreader/koreader/wiki/Installation-on-Kindle-devices):
+
+1. **Download** the latest `simple-opds.koplugin-<version>.zip` from [Releases](https://github.com/broemp/simple-opds/releases) and unzip it on your computer.
+2. **Connect** the Kindle to your computer with a USB cable. It mounts as a USB drive (typically named `Kindle`).
+3. **Open** the Kindle's drive in your file manager. You should see a `koreader/` folder at the top level. Inside it: `plugins/`.
+4. **Copy** the unzipped `simple-opds.koplugin/` folder into `koreader/plugins/`. The path on the device will be `/mnt/us/koreader/plugins/simple-opds.koplugin/`.
+5. **Eject** the Kindle from your computer safely and unplug.
+6. On the Kindle, **open KOReader**. If it was already open when you copied the folder, exit and reopen it (or restart via the gear menu).
+7. The plugin should auto-enable. Open the file manager view in KOReader, tap the menu icon at the top, and look for **Simple OPDS**. Tap it to add your first server.
+
+If the menu entry doesn't appear:
+- Open **⚙️ (top bar) → More tools → Plugin management** and verify *Simple OPDS* is listed and toggled on.
+- Verify the folder structure on the Kindle: `/mnt/us/koreader/plugins/simple-opds.koplugin/_meta.lua` must exist (no extra nesting from the zip).
+
+### From source (developers)
 
 ```sh
 git clone https://github.com/broemp/simple-opds.git
 ln -s "$(pwd)/simple-opds/simple-opds.koplugin" /path/to/koreader/plugins/simple-opds.koplugin
 ```
 
-On a Kindle that's typically `/mnt/us/koreader/plugins/`; on a desktop install it's `~/.config/koreader/plugins/` (or whatever your `KO_HOME` points at).
+Useful when iterating on the code — every restart of KOReader picks up the latest edits. See **Contributing** below for the dev loop.
 
-Restart KOReader. The entry shows up in the FileManager top menu as **Simple OPDS**.
+### Versioning
+
+Each push to `main` runs `.github/workflows/release.yml`, which:
+
+1. Computes a CalVer tag — `v<YYYY>.<M>.<D>` (e.g. `v2026.5.31`), incrementing a `.N` suffix for same-day rebuilds (`v2026.5.31.1`, `v2026.5.31.2`, …).
+2. Rewrites the `version` field in `_meta.lua` from `"dev"` to that version in the build artifact.
+3. Builds `simple-opds.koplugin-<version>.zip` and creates a GitHub release with auto-generated notes plus the zip attached.
+
+Local checkouts always read `version = "dev"`. The injected version only lives in the release zip, so installing from git you'll see `dev`; installing from the release artifact you'll see the date-based version.
 
 ## Usage
 

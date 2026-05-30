@@ -1,0 +1,84 @@
+name: Release
+
+# Tags every push to main with a calendar-versioned release, builds a zip of
+# the .koplugin folder, and attaches it as the release artifact. Same-day
+# rebuilds get an incrementing suffix (v2026.5.31, v2026.5.31.1, …).
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "README.md"
+      - "images/**"
+      - ".gitignore"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # need history + tags
+
+      - name: Compute version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATE=$(date -u +"%Y.%-m.%-d")
+          # Count existing tags for today (v<DATE> and v<DATE>.N variants).
+          EXISTING=$(git tag --list "v${DATE}" "v${DATE}.*" | wc -l | tr -d ' ')
+          if [ "${EXISTING}" -eq 0 ]; then
+            VERSION="${DATE}"
+          else
+            VERSION="${DATE}.${EXISTING}"
+          fi
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Computed ${TAG}"
+
+      - name: Inject version into _meta.lua
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          sed -i "s|version = \"dev\",|version = \"${VERSION}\",|" \
+            simple-opds.koplugin/_meta.lua
+          echo "--- _meta.lua after rewrite ---"
+          cat simple-opds.koplugin/_meta.lua
+
+      - name: Build artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE="simple-opds.koplugin-${{ steps.version.outputs.version }}.zip"
+          zip -r "${ARCHIVE}" simple-opds.koplugin
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+
+      - name: Create tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Tag the commit that triggered this workflow, not the local
+          # working tree (which has the injected version).
+          git tag "${{ steps.version.outputs.tag }}" "${{ github.sha }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          files: ${{ env.ARCHIVE }}
