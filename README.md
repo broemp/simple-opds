@@ -17,3 +17,7 @@ ln -s "$(pwd)/simple-opds.koplugin" /home/broemp/kindle/ko-home/plugins/simple-o
 ```
 
 Then open KOReader and enable **Simple OPDS** under the FileManager top menu.
+
+## Screenshots
+
+![home screen](./images/home_screen.png)
