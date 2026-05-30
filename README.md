@@ -28,34 +28,34 @@ Adding a server opens directly into a grid of book covers — no intermediate "O
 4. Restart KOReader (or use **⚙️ → More tools → Plugin management** to enable it without a restart).
 5. **Simple OPDS** shows up in the FileManager top menu, in the same group as the built-in OPDS browser.
 
-The plugins directory location depends on the device. Common ones:
+The plugins directory location depends on the device. Two views are useful — the path you'll see when the device is plugged in via USB ("as seen on your computer") and the absolute path KOReader itself sees ("on-device"):
 
-| Device      | Plugins path                                            |
-| ----------- | ------------------------------------------------------- |
-| Kindle      | `/mnt/us/koreader/plugins/`                             |
-| Kobo        | `.adds/koreader/plugins/` (in the user-visible root)    |
-| PocketBook  | `applications/koreader/plugins/` (on the internal card) |
-| reMarkable  | `/home/root/koreader/plugins/`                          |
-| Boox        | `Books/.adds/koreader/plugins/` or `koreader/plugins/`  |
-| Android     | The app's external storage `koreader/plugins/`          |
+| Device         | As seen on your computer (USB)                | On-device absolute path                        |
+| -------------- | --------------------------------------------- | ---------------------------------------------- |
+| Kindle         | `<Kindle drive>/koreader/plugins/`            | `/mnt/us/koreader/plugins/`                    |
+| Kobo           | `<Kobo drive>/.adds/koreader/plugins/`        | `/mnt/onboard/.adds/koreader/plugins/`         |
+| PocketBook     | `<PB drive>/applications/koreader/plugins/`   | `/mnt/ext1/applications/koreader/plugins/`     |
+| reMarkable     | n/a — copy over SSH/SCP                       | `/home/root/koreader/plugins/`                 |
+| Android        | The app's storage `koreader/plugins/`         | varies; check KOReader's "About → Paths"       |
+| Linux desktop  | `~/.config/koreader/plugins/`                 | `$KO_HOME/plugins/` (= `~/.config/koreader/plugins/`) |
 
-If you've ever installed another koplugin manually, drop the folder in the same place.
+If you've ever installed another koplugin manually, the same folder you used then is the right one. On Kobo, `.adds/` is hidden by default — your file manager may need "show hidden files" turned on to see it.
 
 ### Kindle (step-by-step)
 
 Assuming you already have [KOReader installed on your Kindle](https://github.com/koreader/koreader/wiki/Installation-on-Kindle-devices):
 
-1. **Download** the latest `simple-opds.koplugin-<version>.zip` from [Releases](https://github.com/broemp/simple-opds/releases) and unzip it on your computer.
-2. **Connect** the Kindle to your computer with a USB cable. It mounts as a USB drive (typically named `Kindle`).
-3. **Open** the Kindle's drive in your file manager. You should see a `koreader/` folder at the top level. Inside it: `plugins/`.
-4. **Copy** the unzipped `simple-opds.koplugin/` folder into `koreader/plugins/`. The path on the device will be `/mnt/us/koreader/plugins/simple-opds.koplugin/`.
+1. **Download** the latest `simple-opds.koplugin-<version>.zip` from [Releases](https://github.com/broemp/simple-opds/releases) and unzip it on your computer. You'll get a `simple-opds.koplugin/` folder.
+2. **Connect** the Kindle to your computer with a USB cable. It mounts as a USB drive named `Kindle` (or similar).
+3. **Open the Kindle drive** in your file manager. At the top level you'll see folders like `documents/`, `audible/`, `system/` … and a `koreader/` folder (this is where KOReader lives). Open `koreader/plugins/`.
+4. **Copy** the entire `simple-opds.koplugin/` folder into `koreader/plugins/`. After the copy, the path on your computer should look like `<Kindle drive>/koreader/plugins/simple-opds.koplugin/_meta.lua` (i.e. the `.koplugin` folder is *directly* inside `plugins/`, not nested inside another folder).
 5. **Eject** the Kindle from your computer safely and unplug.
-6. On the Kindle, **open KOReader**. If it was already open when you copied the folder, exit and reopen it (or restart via the gear menu).
+6. On the Kindle, **open KOReader**. If it was already running while you copied the folder, exit and reopen it (or restart via the gear menu).
 7. The plugin should auto-enable. Open the file manager view in KOReader, tap the menu icon at the top, and look for **Simple OPDS**. Tap it to add your first server.
 
 If the menu entry doesn't appear:
 - Open **⚙️ (top bar) → More tools → Plugin management** and verify *Simple OPDS* is listed and toggled on.
-- Verify the folder structure on the Kindle: `/mnt/us/koreader/plugins/simple-opds.koplugin/_meta.lua` must exist (no extra nesting from the zip).
+- Double-check the folder layout: on the Kindle KOReader sees `/mnt/us/koreader/plugins/simple-opds.koplugin/_meta.lua`. From the computer's side that's `<Kindle drive>/koreader/plugins/simple-opds.koplugin/_meta.lua`. If you accidentally unzipped to a nested `simple-opds.koplugin/simple-opds.koplugin/…`, KOReader won't see it — move the inner folder up one level.
 
 ### From source (developers)
 
