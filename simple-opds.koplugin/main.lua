@@ -65,6 +65,7 @@ function SimpleOPDS:_open_server(server)
                 server = server,
                 nav_links = discovered.nav_links or {},
                 discovered_search_url = discovered.search_url,
+                discovered_entries = discovered.entries or {},
                 download_dir = self:_download_dir(),
                 file_downloaded_callback = function(path) self:_after_download(path) end,
                 on_switch_server = function()

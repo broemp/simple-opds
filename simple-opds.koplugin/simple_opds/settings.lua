@@ -13,20 +13,32 @@ local function valid_view(v)
     return (v == "grid" or v == "list") and v or "grid"
 end
 
-function ServerSettings.default_tabs(server, nav_links)
-    nav_links = nav_links or {}
+-- Seed the four default tabs from whatever the catalog actually exposes:
+-- Tab 1: server root (always available, always called "Home")
+-- Tab 2/3: first two navigable top-level entries the catalog lists, by name
+-- Tab 4: Search
+-- If the catalog has fewer than 2 entries, the remaining slots fall back to
+-- the server root so they're still usable.
+function ServerSettings.default_tabs(server, discovered)
+    discovered = discovered or {}
+    local entries = discovered.entries or {}
+    local function entry_or_root(i)
+        local e = entries[i]
+        if e then return { label = e.label, href = e.href, view = "list" } end
+        return { label = "Browse", href = server.url, view = "grid" }
+    end
     return {
-        { label = "Home",   href = server.default_category_href or server.url, view = "grid" },
-        { label = "Recent", href = nav_links.recent or nav_links.popular or server.url, view = "grid" },
-        { label = "Genre",  href = nav_links.categories or server.url, view = "list" },
+        { label = "Home", href = server.url, view = "grid" },
+        entry_or_root(1),
+        entry_or_root(2),
         { label = "Search", href = ServerSettings.SEARCH_HREF, view = "grid" },
     }
 end
 
-function ServerSettings.normalize_tabs(server, nav_links)
+function ServerSettings.normalize_tabs(server, discovered)
     local tabs = server.tabs
     if type(tabs) ~= "table" or #tabs == 0 then
-        return ServerSettings.default_tabs(server, nav_links)
+        return ServerSettings.default_tabs(server, discovered)
     end
     local out = {}
     for i = 1, ServerSettings.TAB_COUNT do

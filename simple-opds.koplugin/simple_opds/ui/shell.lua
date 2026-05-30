@@ -23,6 +23,7 @@ local TextBoxWidget = require("ui/widget/textboxwidget")
 local TitleBar = require("ui/widget/titlebar")
 local UIManager = require("ui/uimanager")
 local VerticalGroup = require("ui/widget/verticalgroup")
+local logger = require("logger")
 local VerticalSpan = require("ui/widget/verticalspan")
 local util = require("util")
 local _ = require("gettext")
@@ -51,6 +52,7 @@ local Shell = InputContainer:extend{
     server = nil,                   -- table: { id, name, url, ... }
     nav_links = nil,                -- {recent, popular, categories}
     discovered_search_url = nil,    -- OpenSearch URL from the root feed
+    discovered_entries = nil,       -- root feed entries [{label, href}, ...]
     download_dir = nil,
     file_downloaded_callback = nil,
     on_switch_server = nil,
@@ -64,7 +66,11 @@ function Shell:init()
     self.dimen = Geom:new{ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() }
     self.covers_in_flight = {}
     self.nav_links = self.nav_links or {}
-    self.tabs = ServerSettings.normalize_tabs(self.server, self.nav_links)
+    self.tabs = ServerSettings.normalize_tabs(self.server, {
+        nav_links = self.nav_links,
+        search_url = self.discovered_search_url,
+        entries = self.discovered_entries or {},
+    })
     self.active_tab = 1
     self:_build_chrome()
     -- Swipe left/right to flip pages; gesture range covers the full shell so

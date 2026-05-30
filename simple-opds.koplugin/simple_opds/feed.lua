@@ -207,14 +207,22 @@ function FeedClient.list_items(server, item_url)
     }
 end
 
--- Probe server root. Returns { nav_links, search_url } from the root feed,
--- or nil if the request failed.
+-- Probe server root. Returns { nav_links, search_url, entries } from the
+-- root feed, or nil on failure. `entries` is the navigable top-level items
+-- the catalog exposes ({label, href}), used as the default tab seed.
 function FeedClient.discover(server)
     local listing = FeedClient.list_items(server, server.url)
     if not listing then return nil end
+    local entries = {}
+    for _, item in ipairs(listing.items or {}) do
+        if item.sub_feed_url and item.title and item.title ~= "" then
+            entries[#entries + 1] = { label = item.title, href = item.sub_feed_url }
+        end
+    end
     return {
         nav_links = listing.nav_links or {},
         search_url = listing.search_url,
+        entries = entries,
     }
 end
 
